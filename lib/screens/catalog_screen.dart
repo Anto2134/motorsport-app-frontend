@@ -81,7 +81,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
               });
             },
             decoration: InputDecoration(
-              hintText: "Cerca un campionato...",
+              hintText: "Cerca un campionatoooo...",
               prefixIcon: const Icon(Icons.search, color: Color(0xFFE53935)),
               suffixIcon: _searchController.text.isNotEmpty 
                 ? IconButton(icon: const Icon(Icons.clear, color: Colors.white54), onPressed: () {
