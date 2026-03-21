@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart'; // 1. L'importazione magica
 import 'screens/catalog_screen.dart';
 import 'screens/favorites_screen.dart';
-import 'package:provider/provider.dart';
 import 'services/favorites_provider.dart';
 
 void main() {
   runApp(
-    // Avvolgiamo tutta l'app nel nostro "Cervello" dei Preferiti!
     ChangeNotifierProvider(
       create: (context) => FavoritesProvider(),
       child: const MotorsportApp(),
@@ -26,16 +26,34 @@ class MotorsportApp extends StatelessWidget {
         brightness: Brightness.dark,
         primaryColor: const Color(0xFFE53935),
         scaffoldBackgroundColor: const Color(0xFF121212),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1E1E1E),
+        
+        // 2. LA MAGIA DELLA TIPOGRAFIA
+        // Usiamo "Inter" come font di base per tutti i testi dell'app
+        textTheme: GoogleFonts.interTextTheme(
+          Theme.of(context).textTheme,
+        ).apply(
+          bodyColor: Colors.white,
+          displayColor: Colors.white,
+        ),
+        
+        appBarTheme: AppBarTheme(
+          backgroundColor: const Color(0xFF1E1E1E),
           elevation: 0,
           centerTitle: true,
+          // Usiamo "Montserrat" in grassetto solo per il Titolone in alto
+          titleTextStyle: GoogleFonts.montserrat(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       ),
-      home: const MainScreen(), // Puntiamo alla nuova schermata principale con il menu
+      home: const MainScreen(),
     );
   }
 }
+
+// ... DA QUI IN POI LASCIA IL RESTO DEL CODICE IDENTICO (class MainScreen ecc.) ...
 
 // Questa è l'impalcatura che contiene il menu in basso!
 class MainScreen extends StatefulWidget {
