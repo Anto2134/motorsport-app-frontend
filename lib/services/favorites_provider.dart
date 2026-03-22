@@ -45,4 +45,10 @@ class FavoritesProvider extends ChangeNotifier {
   bool isFavorite(dynamic campionato) {
     return _favoriteItems.any((item) => item['nome'] == campionato['nome']);
   }
+  // Aggiungi questo metodo per svuotare tutta la lista in un colpo solo!
+  void clearFavorites() {
+    _favoriteItems.clear();
+    _salvaPreferiti(); // Aggiorniamo la cassaforte
+    notifyListeners(); // Avvisiamo la UI
+  }
 }
