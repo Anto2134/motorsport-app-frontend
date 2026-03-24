@@ -6,129 +6,53 @@ import '../services/favorites_provider.dart';
 class FavoritesScreen extends StatelessWidget {
   const FavoritesScreen({super.key});
 
-  Color _parseColor(String? hexColor) {
-    if (hexColor == null || hexColor.isEmpty) return const Color(0xFFE53935);
-    hexColor = hexColor.replaceAll('#', '');
-    if (hexColor.length == 6) hexColor = 'FF$hexColor'; 
-    return Color(int.parse(hexColor, radix: 16));
-  }
-
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<FavoritesProvider>();
-    final favorites = provider.favoriteItems;
-    final isCloud = provider.isCloudSynced;
+    final favorites = context.watch<FavoritesProvider>().favoriteItems;
 
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          color: isCloud ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(isCloud ? Icons.cloud_done : Icons.phone_android, size: 16, color: isCloud ? Colors.green : Colors.orangeAccent),
-              const SizedBox(width: 8),
-              Text(isCloud ? "Sincronizzato nel Cloud" : "Salvato solo su questo dispositivo", style: TextStyle(color: isCloud ? Colors.green : Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-        if (favorites.isNotEmpty)
-          Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: TextButton.icon(
-                onPressed: () {
-                  HapticFeedback.heavyImpact();
-                  context.read<FavoritesProvider>().clearFavorites();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lista preferiti svuotata! 🗑️"), duration: Duration(seconds: 2)));
-                },
-                icon: const Icon(Icons.delete_sweep, color: Color(0xFFE53935)),
-                label: const Text("Svuota tutto", style: TextStyle(color: Color(0xFFE53935), fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ),
-        Expanded(
-          child: favorites.isEmpty
-              ? Semantics(
-                  label: 'Nessun preferito.',
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.star_border, size: 80, color: Colors.white24),
-                        const SizedBox(height: 16),
-                        const Text("Nessun preferito", style: TextStyle(fontSize: 20, color: Colors.white54, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Text(isCloud ? "Tocca la stellina nel catalogo\nper salvarli nel tuo account." : "Tocca la stellina nel catalogo.\nAccedi per non perderli mai.", textAlign: TextAlign.center, style: const TextStyle(color: Colors.white38)),
-                      ],
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Gestisci Preferiti", style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        elevation: 0,
+      ),
+      body: favorites.isEmpty
+          ? const Center(
+              child: Text("Non hai ancora salvato nessun campionato.", style: TextStyle(color: Colors.grey, fontSize: 16)),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: favorites.length,
+              itemBuilder: (context, index) {
+                final camp = favorites[index];
+                final logoFile = camp['logo_file'] ?? "";
+                
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  child: ListTile(
+                    leading: Container(
+                      width: 40, height: 40,
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                      child: logoFile.isNotEmpty 
+                          ? Image.asset('assets/logos/$logoFile', fit: BoxFit.contain, errorBuilder: (c,e,s) => const Icon(Icons.flag, color: Colors.black))
+                          : const Icon(Icons.sports_score, color: Colors.black),
+                    ),
+                    title: Text(camp['nome'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(camp['categoria'] ?? "Motorsport"),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      tooltip: "Rimuovi dai preferiti",
+                      onPressed: () {
+                        HapticFeedback.mediumImpact();
+                        context.read<FavoritesProvider>().toggleFavorite(camp);
+                      },
                     ),
                   ),
-                )
-              : Semantics(
-                  label: 'Lista dei preferiti',
-                  child: ListView.builder(
-                    padding: const EdgeInsets.only(top: 10, bottom: 20),
-                    itemCount: favorites.length,
-                    itemBuilder: (context, index) {
-                      final camp = favorites[index];
-                      final nome = camp['nome'] ?? "Sconosciuto";
-                      final coloreCamp = _parseColor(camp['colore']);
-                      
-                      final logoFile = camp['logo_file'] ?? "";
-                      Widget logoWidget;
-                      
-                      if (logoFile.isNotEmpty) {
-                        logoWidget = Image.asset(
-                          'assets/logos/$logoFile',
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Icon(Icons.star, color: coloreCamp);
-                          },
-                        );
-                      } else {
-                        logoWidget = Icon(Icons.star, color: coloreCamp);
-                      }
-
-                      return Semantics(
-                        label: 'Preferito: $nome',
-                        child: Dismissible(
-                          key: Key(nome),
-                          direction: DismissDirection.endToStart,
-                          onDismissed: (direction) { HapticFeedback.mediumImpact(); context.read<FavoritesProvider>().toggleFavorite(camp); },
-                          background: Container(margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), decoration: BoxDecoration(color: const Color(0xFFE53935), borderRadius: BorderRadius.circular(15)), alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.delete, color: Colors.white, size: 30)),
-                          child: Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            color: Theme.of(context).cardColor,
-                            clipBehavior: Clip.antiAlias,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                            child: Container(
-                              decoration: BoxDecoration(border: Border(left: BorderSide(color: coloreCamp, width: 6))),
-                              child: ListTile(
-                                // ==========================================
-                                // CORREZIONE GEOMETRICA PER I PREFERITI
-                                // ==========================================
-                                leading: Container(
-                                  width: 60, height: 40,
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                                  child: Center(child: logoWidget)
-                                ),
-                                title: Text(nome, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text(camp['categoria'] ?? "Motorsport", style: const TextStyle(fontSize: 12)),
-                                trailing: const Icon(Icons.swipe_left, color: Colors.grey),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-        ),
-      ],
+                );
+              },
+            ),
     );
   }
 }

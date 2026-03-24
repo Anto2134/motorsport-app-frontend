@@ -16,7 +16,9 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final String baseUrl = "motorsport-hub1-0-1.onrender.com";
   Map<String, dynamic> _liveData = {};
+  List<dynamic> _newsList = [];
   bool _isLoading = true;
+  bool _isLoadingNews = true;
   Timer? _timer;
   DateTime _now = DateTime.now();
 
@@ -24,6 +26,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _fetchLiveTimestamps();
+    _fetchNews();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) setState(() { _now = DateTime.now(); });
     });
@@ -49,6 +52,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) { 
       if (mounted) setState(() { _isLoading = false; }); 
     }
+  }
+
+  Future<void> _fetchNews() async {
+    if (mounted) setState(() => _isLoadingNews = true);
+    try {
+      final res = await http.get(Uri.parse('https://$baseUrl/api/news'));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        if (mounted) setState(() { _newsList = data['news']; _isLoadingNews = false; });
+      } else {
+        if (mounted) setState(() => _isLoadingNews = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingNews = false);
+    }
+  }
+
+  Future<void> _refreshAll() async {
+    await _fetchLiveTimestamps();
+    await _fetchNews();
   }
 
   Color _parseColor(String? hexColor) {
@@ -85,12 +108,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(title: const Text("La tua Plancia 🏁", style: TextStyle(fontWeight: FontWeight.bold)), centerTitle: true, elevation: 0),
       body: RefreshIndicator(
         color: const Color(0xFFE53935),
-        onRefresh: _fetchLiveTimestamps,
+        onRefresh: _refreshAll,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 1. CAROSELLO PREFERITI
               if (favorites.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(32.0),
@@ -113,7 +137,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       final garaData = liveCamp['prossima_gara'];
                       DateTime? targetDate;
                       
-                      // LOGICA DI CONTROLLO HONESTA
                       String titoloGara = "Sorgente dati irraggiungibile ⚠️";
                       if (_isLoading) {
                         titoloGara = "Ricerca dati in corso...";
@@ -181,20 +204,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
               
-              const Padding(padding: EdgeInsets.only(left: 16, top: 32, bottom: 16), child: Text("Ultime dal Paddock 📰", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: 3,
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    leading: Container(width: 60, height: 60, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.2), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.article)),
-                    title: const Text("Notizia in arrivo"),
-                    subtitle: const Text("Presto collegheremo le news..."),
-                    trailing: const Icon(Icons.chevron_right),
-                  );
-                },
-              ),
+              // 2. SEZIONE NOTIZIE VERE
+              const Padding(padding: EdgeInsets.only(left: 16, top: 32, bottom: 8), child: Text("Ultime dal Paddock 📰", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+              
+              if (_isLoadingNews)
+                const Center(child: Padding(padding: EdgeInsets.all(32.0), child: CircularProgressIndicator()))
+              else if (_newsList.isEmpty)
+                const Padding(padding: EdgeInsets.all(16.0), child: Text("Nessuna notizia disponibile al momento.", style: TextStyle(color: Colors.grey)))
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _newsList.length,
+                  itemBuilder: (context, index) {
+                    final news = _newsList[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      elevation: 2,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(15),
+                        onTap: () async {
+                          HapticFeedback.lightImpact();
+                          final url = Uri.parse(news['link']);
+                          if (await canLaunchUrl(url)) {
+                            // Apre la notizia direttamente dentro l'app (senza uscire)
+                            await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 50, height: 50, 
+                                decoration: BoxDecoration(color: const Color(0xFFE53935).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), 
+                                child: const Icon(Icons.campaign, color: Color(0xFFE53935))
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(news['titolo'] ?? "Titolo non disponibile", maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                    const SizedBox(height: 6),
+                                    Text(news['data'] ?? "", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right, color: Colors.grey)
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
             ],
           ),
         ),

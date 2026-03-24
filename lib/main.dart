@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'screens/favorites_screen.dart';
 
 // Importiamo le 3 nuove schermate principali
 import 'screens/dashboard_screen.dart'; // LA TUA NUOVA HOME!
@@ -90,26 +90,23 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  // ECCO LA NUOVA DISPOSIZIONE DELLE SCHERMATE
-  final List<Widget> _screens = [
-    const DashboardScreen(), // 0: La nuova Plancia/Home
-    const CatalogScreen(),   // 1: Esplora (Catalogo)
-    const ProfileScreen(),   // 2: Il tuo Profilo
+final List<Widget> _screens = [
+    const DashboardScreen(), // 0: Home
+    const CatalogScreen(),   // 1: Esplora
+    const FavoritesScreen(), // 2: Gestisci Preferiti <--- NUOVA!
+    const ProfileScreen(),   // 3: Profilo
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Abbiamo rimosso l'AppBar globale. Ora ci pensano le singole schermate!
-      
-      // IndexedStack mantiene vive le schermate in background senza ricaricarle
       body: IndexedStack(
         index: _currentIndex,
         children: _screens,
       ),
-      
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
+        type: BottomNavigationBarType.fixed, // Necessario quando ci sono più di 3 tab
         onTap: (index) {
           HapticFeedback.selectionClick();
           setState(() => _currentIndex = index);
@@ -117,6 +114,7 @@ class _MainScreenState extends State<MainScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.speed), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Esplora'),
+          BottomNavigationBarItem(icon: Icon(Icons.star), label: 'Preferiti'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profilo'),
         ],
       ),
