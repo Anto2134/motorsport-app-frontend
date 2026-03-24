@@ -2,37 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeProvider extends ChangeNotifier {
-  ThemeMode _themeMode = ThemeMode.dark; // Il Dark Mode resta il nostro default!
+  ThemeMode _themeMode = ThemeMode.system; // Di default usa quello del telefono
 
   ThemeMode get themeMode => _themeMode;
 
   ThemeProvider() {
-    _caricaTema();
+    _loadTheme();
   }
 
-  Future<void> _caricaTema() async {
+  // Carica il tema salvato al riavvio dell'app
+  Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
-    final temaSalvato = prefs.getString('tema_app');
-    
-    if (temaSalvato == 'light') {
-      _themeMode = ThemeMode.light;
-    } else if (temaSalvato == 'dark') {
-      _themeMode = ThemeMode.dark;
-    } else {
-      _themeMode = ThemeMode.system;
+    final isDark = prefs.getBool('isDarkTheme');
+    if (isDark != null) {
+      _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
-  Future<void> setTema(ThemeMode mode) async {
-    _themeMode = mode;
-    notifyListeners();
-    
+  // LA FUNZIONE MANCANTE! Cambia il tema e lo salva
+  Future<void> toggleTheme(bool isDark) async {
+    _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
     final prefs = await SharedPreferences.getInstance();
-    String valoreDaSalvare = 'system';
-    if (mode == ThemeMode.light) valoreDaSalvare = 'light';
-    if (mode == ThemeMode.dark) valoreDaSalvare = 'dark';
-    
-    await prefs.setString('tema_app', valoreDaSalvare);
+    await prefs.setBool('isDarkTheme', isDark);
+    notifyListeners();
   }
 }

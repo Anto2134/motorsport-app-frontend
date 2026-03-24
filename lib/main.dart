@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Importiamo le 3 nuove schermate principali
+import 'screens/dashboard_screen.dart'; // LA TUA NUOVA HOME!
 import 'screens/catalog_screen.dart';
-import 'screens/favorites_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/favorites_provider.dart';
-import 'services/theme_provider.dart'; // 1. IMPORTIAMO IL TEMA
+import 'services/theme_provider.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +32,6 @@ void main() async {
   final bool haVistoOnboarding = prefs.getBool('ha_visto_onboarding') ?? false;
 
   runApp(
-    // 2. MULTIPROVIDER: L'app ora ha DUE cervelli!
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => FavoritesProvider()),
@@ -47,17 +48,13 @@ class MotorsportApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Ascoltiamo il provider del tema
     final themeProvider = context.watch<ThemeProvider>();
 
     return MaterialApp(
       title: 'Motorsport Hub',
       debugShowCheckedModeBanner: false,
+      themeMode: themeProvider.themeMode, 
       
-      // 3. DEFINIAMO IL TEMA CHIARO E SCURO
-      themeMode: themeProvider.themeMode, // Sceglie in automatico in base alle impostazioni
-      
-      // TEMA SCURO (Quello classico nostro)
       darkTheme: ThemeData(
         brightness: Brightness.dark,
         primaryColor: const Color(0xFFE53935),
@@ -68,7 +65,6 @@ class MotorsportApp extends StatelessWidget {
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(backgroundColor: Color(0xFF1E1E1E), selectedItemColor: Color(0xFFE53935), unselectedItemColor: Colors.white54),
       ),
       
-      // TEMA CHIARO (Pulito ed elegante)
       theme: ThemeData(
         brightness: Brightness.light,
         primaryColor: const Color(0xFFE53935),
@@ -94,36 +90,34 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
+  // ECCO LA NUOVA DISPOSIZIONE DELLE SCHERMATE
   final List<Widget> _screens = [
-    const CatalogScreen(),
-    const FavoritesScreen(),
-    const ProfileScreen(), 
+    const DashboardScreen(), // 0: La nuova Plancia/Home
+    const CatalogScreen(),   // 1: Esplora (Catalogo)
+    const ProfileScreen(),   // 2: Il tuo Profilo
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Motorsport Hub 🏁', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.ios_share),
-            tooltip: 'Condividi l\'app',
-            onPressed: () {
-              Share.share('🏎️ Ehi! Sto usando Motorsport Hub per aggiungere gli orari di F1, WEC e MotoGP direttamente nel calendario del telefono.\n\nProvala gratis: https://IL-TUO-LINK-NETLIFY.netlify.app');
-            },
-          ),
-          const SizedBox(width: 8),
-        ],
+      // Abbiamo rimosso l'AppBar globale. Ora ci pensano le singole schermate!
+      
+      // IndexedStack mantiene vive le schermate in background senza ricaricarle
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
       ),
-      body: _screens[_currentIndex],
+      
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          HapticFeedback.selectionClick();
+          setState(() => _currentIndex = index);
+        },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'Catalogo'),
-          BottomNavigationBarItem(icon: Icon(Icons.star), label: 'Preferiti'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Impostazioni'), // Rinominato in Impostazioni
+          BottomNavigationBarItem(icon: Icon(Icons.speed), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Esplora'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profilo'),
         ],
       ),
     );

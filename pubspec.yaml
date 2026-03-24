@@ -50,7 +50,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
+  flutter_launcher_icons: "^0.13.1"
+  flutter_native_splash: "^2.3.11"
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -73,7 +74,29 @@ flutter:
   assets:
     - assets/logos/
   #   - images/a_dot_ham.jpeg
-
+# ==========================================
+# CONFIGURAZIONE ICONA APP
+# ==========================================
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    background_color: "#1E1E1E" # Il colore scuro del tuo sfondo
+    theme_color: "#E53935" 
+    
+  # ==========================================
+# CONFIGURAZIONE SPLASH SCREEN
+# ==========================================
+flutter_native_splash:
+  color: "#1E1E1E" # Sfondo scuro elegante
+  image: "assets/icon/app_icon.png" # Il tuo logo al centro
+  android_12:
+    image: "assets/icon/app_icon.png"
+    color: "#1E1E1E"
+  web: true      # Il rosso acceso
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

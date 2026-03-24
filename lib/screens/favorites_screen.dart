@@ -78,12 +78,12 @@ class FavoritesScreen extends StatelessWidget {
                       final coloreCamp = _parseColor(camp['colore']);
                       
                       final logoFile = camp['logo_file'] ?? "";
-
                       Widget logoWidget;
+                      
                       if (logoFile.isNotEmpty) {
                         logoWidget = Image.asset(
                           'assets/logos/$logoFile',
-                          width: 30, height: 30, fit: BoxFit.contain,
+                          fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
                             return Icon(Icons.star, color: coloreCamp);
                           },
@@ -107,7 +107,15 @@ class FavoritesScreen extends StatelessWidget {
                             child: Container(
                               decoration: BoxDecoration(border: Border(left: BorderSide(color: coloreCamp, width: 6))),
                               child: ListTile(
-                                leading: Container(width: 50, height: 50, padding: const EdgeInsets.all(8), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: Center(child: logoWidget)),
+                                // ==========================================
+                                // CORREZIONE GEOMETRICA PER I PREFERITI
+                                // ==========================================
+                                leading: Container(
+                                  width: 60, height: 40,
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                                  child: Center(child: logoWidget)
+                                ),
                                 title: Text(nome, style: const TextStyle(fontWeight: FontWeight.bold)),
                                 subtitle: Text(camp['categoria'] ?? "Motorsport", style: const TextStyle(fontSize: 12)),
                                 trailing: const Icon(Icons.swipe_left, color: Colors.grey),

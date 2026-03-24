@@ -3,7 +3,7 @@
     "short_name": "Motorsport",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#121212",
+    "background_color": "#1E1E1E",
     "theme_color": "#E53935",
     "description": "Il calendario definitivo per il motorsport.",
     "orientation": "portrait-primary",
