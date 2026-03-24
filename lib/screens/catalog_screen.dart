@@ -1,29 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // LA NOSTRA NUOVA LIBRERIA
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../services/favorites_provider.dart';
 import '../widgets/shimmer_card.dart';
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
-
   @override
   State<CatalogScreen> createState() => _CatalogScreenState();
 }
 
 class _CatalogScreenState extends State<CatalogScreen> {
   final String baseUrl = "motorsport-hub1-0-1.onrender.com"; 
-  
   List<dynamic> campionati = [];
   List<dynamic> campionatiFiltrati = [];
   bool inCaricamento = true;
   bool haErrore = false;
   String messaggioErrore = "";
-  
   final TextEditingController _searchController = TextEditingController();
+  
+  String _filtroAttivo = 'Tutti 🌍';
+  final List<String> _categorie = ['Tutti 🌍', 'Formula 🏎️', 'Moto 🏍️', 'Endurance ⏱️', 'Rally 🌲'];
+  List<String> _cronologiaRicerche = [];
 
   @override
   void initState() {
@@ -31,221 +34,241 @@ class _CatalogScreenState extends State<CatalogScreen> {
     _inizializzaApp();
   }
 
-  // 1. IL NUOVO ORDINE DI ACCENSIONE
   Future<void> _inizializzaApp() async {
-    await _caricaDatiLocali(); // Prima guardiamo in memoria...
-    _scaricaCatalogo();        // ...poi aggiorniamo da internet di nascosto!
+    await _caricaCronologia();
+    await _caricaDatiLocali();
+    _scaricaCatalogo();
   }
 
-  // 2. FUNZIONE PER LEGGERE LA MEMORIA DEL TELEFONO
+  Future<void> _caricaCronologia() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() { _cronologiaRicerche = prefs.getStringList('cronologia_ricerche') ?? []; });
+  }
+
+  Future<void> _salvaRicerca(String termine) async {
+    if (termine.trim().isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    _cronologiaRicerche.remove(termine);
+    _cronologiaRicerche.insert(0, termine);
+    if (_cronologiaRicerche.length > 5) _cronologiaRicerche.removeLast();
+    await prefs.setStringList('cronologia_ricerche', _cronologiaRicerche);
+    setState(() {});
+  }
+
   Future<void> _caricaDatiLocali() async {
     final prefs = await SharedPreferences.getInstance();
-    final datiSalvati = prefs.getString('catalogo_cache'); // Cerchiamo il salvataggio
-    
-    if (datiSalvati != null) {
-      if (mounted) {
-        setState(() {
-          campionati = json.decode(datiSalvati);
-          campionatiFiltrati = campionati;
-          inCaricamento = false; // Togliamo subito lo shimmer!
-        });
-        debugPrint("Dati caricati istantaneamente dalla memoria locale ⚡");
-      }
-    }
+    final dati = prefs.getString('catalogo_cache');
+    if (dati != null && mounted) { setState(() { campionati = json.decode(dati); _applicaFiltri(); inCaricamento = false; }); }
   }
 
-  // 3. LA FUNZIONE DI DOWNLOAD AGGIORNATA
   Future<void> _scaricaCatalogo() async {
-    // Mostriamo lo shimmer SOLO se non abbiamo dati salvati
-    if (campionati.isEmpty) {
-      setState(() {
-        inCaricamento = true;
-        haErrore = false;
-      });
-    }
-
+    if (campionati.isEmpty) setState(() { inCaricamento = true; haErrore = false; });
     try {
-      final response = await http.get(Uri.parse('https://$baseUrl/api/campionati'));
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        
-        // SALVIAMO I NUOVI DATI IN MEMORIA PER LA PROSSIMA VOLTA
+      final res = await http.get(Uri.parse('https://$baseUrl/api/campionati'));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('catalogo_cache', json.encode(data['campionati']));
+        if (mounted) setState(() { campionati = data['campionati']; _applicaFiltri(); inCaricamento = false; haErrore = false; });
+      } else if (campionati.isEmpty) _mostraErrore("Server ai box.");
+    } catch (e) { if (campionati.isEmpty) _mostraErrore("Sei offline?"); }
+  }
 
-        if (mounted) {
-          setState(() {
-            campionati = data['campionati'];
-            campionatiFiltrati = campionati;
-            inCaricamento = false;
-            haErrore = false;
-          });
-          debugPrint("Dati aggiornati dal server ☁️");
-        }
-      } else {
-        if (campionati.isEmpty) _mostraErrore("I server sono ai box. Riprova tra poco!");
-      }
-    } catch (e) {
-      debugPrint("Errore di rete: $e");
-      if (campionati.isEmpty) _mostraErrore("Nessuna connessione a internet. Sei offline?");
+  void _mostraErrore(String msg) { if (mounted) setState(() { haErrore = true; messaggioErrore = msg; inCaricamento = false; }); }
+
+  void _applicaFiltri() {
+    setState(() {
+      campionatiFiltrati = campionati.where((camp) {
+        final nome = camp['nome'].toString().toLowerCase();
+        final testo = _searchController.text.toLowerCase();
+        final matchTesto = nome.contains(testo);
+        bool matchPillola = true;
+        if (_filtroAttivo == 'Formula 🏎️') matchPillola = nome.contains('formula') || nome.contains('f1') || nome.contains('indy');
+        else if (_filtroAttivo == 'Moto 🏍️') matchPillola = nome.contains('moto') || nome.contains('superbike');
+        else if (_filtroAttivo == 'Endurance ⏱️') matchPillola = nome.contains('wec') || nome.contains('imsa') || nome.contains('gt');
+        else if (_filtroAttivo == 'Rally 🌲') matchPillola = nome.contains('rally') || nome.contains('wrc');
+        return matchTesto && matchPillola;
+      }).toList();
+    });
+  }
+
+  Future<void> _sincronizza(String u, String n) async {
+    final webcalUrl = Uri.parse('webcal://$baseUrl/calendari/genera?url=${Uri.encodeComponent(u)}&nome=${Uri.encodeComponent(n)}');
+    if (!await launchUrl(webcalUrl) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Impossibile aprire il calendario")));
     }
   }
 
-  void _mostraErrore(String messaggio) {
-    if (mounted) {
-      setState(() {
-        haErrore = true;
-        messaggioErrore = messaggio;
-        inCaricamento = false;
-      });
-    }
-  }
-
-  Future<void> _sincronizza(String urlSorgente, String nome) async {
-    final urlCodificato = Uri.encodeComponent(urlSorgente);
-    final nomeCodificato = Uri.encodeComponent(nome);
-    final Uri webcalUrl = Uri.parse('webcal://$baseUrl/calendari/genera?url=$urlCodificato&nome=$nomeCodificato');
-    
-    if (!await launchUrl(webcalUrl)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Impossibile aprire il calendario del telefono", style: TextStyle(color: Colors.white))),
-        );
-      }
-    }
+  Color _parseColor(String? hexColor) {
+    if (hexColor == null || hexColor.isEmpty) return const Color(0xFFE53935);
+    hexColor = hexColor.replaceAll('#', '');
+    if (hexColor.length == 6) hexColor = 'FF$hexColor'; 
+    return Color(int.parse(hexColor, radix: 16));
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Column(
       children: [
-        // Barra di ricerca
         Container(
-          padding: const EdgeInsets.all(16.0),
-          decoration: const BoxDecoration(
-            color: Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
-          ),
-          child: TextField(
-            controller: _searchController,
-            onChanged: (testo) {
-              setState(() {
-                campionatiFiltrati = campionati.where((camp) {
-                  return camp['nome'].toString().toLowerCase().contains(testo.toLowerCase());
-                }).toList();
-              });
-            },
-            decoration: InputDecoration(
-              hintText: "Cerca un campionato...",
-              prefixIcon: const Icon(Icons.search, color: Color(0xFFE53935)),
-              suffixIcon: _searchController.text.isNotEmpty 
-                ? IconButton(icon: const Icon(Icons.clear, color: Colors.white54), onPressed: () {
-                    _searchController.clear();
-                    setState(() => campionatiFiltrati = campionati);
-                  })
-                : null,
-              filled: true,
-              fillColor: const Color(0xFF2A2A2A),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
-            ),
+          padding: const EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0, bottom: 8.0),
+          decoration: BoxDecoration(color: Theme.of(context).appBarTheme.backgroundColor, borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20))),
+          child: Column(
+            children: [
+              TextField(
+                controller: _searchController,
+                onChanged: (t) => _applicaFiltri(),
+                onSubmitted: (t) { _salvaRicerca(t); },
+                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                decoration: InputDecoration(
+                  hintText: "Cerca un campionato...",
+                  hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.black54),
+                  prefixIcon: const Icon(Icons.search, color: Color(0xFFE53935)),
+                  suffixIcon: _searchController.text.isNotEmpty 
+                    ? IconButton(icon: Icon(Icons.clear, color: isDark ? Colors.white54 : Colors.black54), onPressed: () { HapticFeedback.selectionClick(); _searchController.clear(); _applicaFiltri(); })
+                    : null,
+                  filled: true,
+                  fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: _categorie.map((cat) {
+                    final isSelected = _filtroAttivo == cat;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: ChoiceChip(
+                        label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                        selected: isSelected,
+                        selectedColor: const Color(0xFFE53935),
+                        backgroundColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        onSelected: (sel) { if (sel) { HapticFeedback.lightImpact(); setState(() { _filtroAttivo = cat; _applicaFiltri(); }); } },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              if (_searchController.text.isEmpty && _cronologiaRicerche.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12.0),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        Icon(Icons.history, size: 16, color: isDark ? Colors.white54 : Colors.black54),
+                        const SizedBox(width: 8),
+                        ..._cronologiaRicerche.map((ricerca) => Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: InkWell(
+                            onTap: () { _searchController.text = ricerca; _applicaFiltri(); _salvaRicerca(ricerca); },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(border: Border.all(color: isDark ? Colors.white24 : Colors.black12), borderRadius: BorderRadius.circular(15)),
+                              child: Text(ricerca, style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
+                            ),
+                          ),
+                        )),
+                      ],
+                    ),
+                  ),
+                )
+            ],
           ),
         ),
         
-        // Logica a Bivio
         Expanded(
           child: inCaricamento 
-            ? ListView.builder(
-                padding: const EdgeInsets.only(top: 10, bottom: 20),
-                itemCount: 8,
-                itemBuilder: (context, index) => const ShimmerCard(),
-              )
+            ? ListView.builder(itemCount: 8, itemBuilder: (c, i) => const ShimmerCard())
             : haErrore 
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.wifi_off, size: 80, color: Colors.white24),
-                      const SizedBox(height: 16),
-                      const Text("Ops! Motore in stallo", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                      const SizedBox(height: 8),
-                      Text(messaggioErrore, style: const TextStyle(fontSize: 16, color: Colors.white54), textAlign: TextAlign.center),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: _scaricaCatalogo,
-                        icon: const Icon(Icons.refresh, color: Colors.white),
-                        label: const Text("Riprova", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFE53935),
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        ),
-                      )
-                    ],
-                  ),
-                )
+              ? Center(child: Text(messaggioErrore))
               : campionatiFiltrati.isEmpty 
-                ? const Center(child: Text("Nessun campionato trovato 🏎️💨", style: TextStyle(color: Colors.white54)))
+                ? const Center(child: Text("Nessun risultato"))
                 : RefreshIndicator(
                     color: const Color(0xFFE53935),
-                    backgroundColor: const Color(0xFF1E1E1E),
                     onRefresh: _scaricaCatalogo,
-                    child: ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.only(top: 10, bottom: 20),
-                        itemCount: campionatiFiltrati.length,
-                        itemBuilder: (context, index) {
-                          final camp = campionatiFiltrati[index];
-                          final nomeCampionato = camp['nome'] != "" ? camp['nome'] : "Campionato Sconosciuto";
-                          
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            color: const Color(0xFF1E1E1E),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                            child: ListTile(
-                              leading: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(color: const Color(0xFFE53935).withOpacity(0.1), shape: BoxShape.circle),
-                                child: const Icon(Icons.sports_score, color: Color(0xFFE53935)),
-                              ),
-                              title: Text(nomeCampionato, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                              subtitle: const Text("Aggiungi all'agenda", style: TextStyle(color: Colors.white54, fontSize: 12)),
-                              
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Consumer<FavoritesProvider>(
-                                    builder: (context, favorites, child) {
-                                      final isFav = favorites.isFavorite(camp);
-                                      return IconButton(
-                                        icon: Icon(
-                                          isFav ? Icons.star : Icons.star_border,
-                                          color: isFav ? Colors.amber : Colors.white54,
+                    child: AnimationLimiter(
+                      child: ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.only(top: 10, bottom: 20),
+                          itemCount: campionatiFiltrati.length,
+                          itemBuilder: (context, index) {
+                            
+                            final camp = campionatiFiltrati[index];
+                            final nome = camp['nome'] ?? "Sconosciuto";
+                            final coloreCamp = _parseColor(camp['colore']);
+                            
+                            // ORA CERCHIAMO IL NOME DEL FILE LOCALE!
+                            final logoFile = camp['logo_file'] ?? "";
+                            
+                            Widget logoWidget;
+                            if (logoFile.isNotEmpty) {
+                              // LEGGE DALLA TUA CARTELLA LOCALE!
+                              logoWidget = Image.asset(
+                                'assets/logos/$logoFile',
+                                width: 30, height: 30, fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Icon(Icons.sports_score, color: coloreCamp);
+                                },
+                              );
+                            } else {
+                              logoWidget = Icon(Icons.sports_score, color: coloreCamp);
+                            }
+                            
+                            return AnimationConfiguration.staggeredList(
+                              position: index,
+                              duration: const Duration(milliseconds: 375),
+                              child: SlideAnimation(
+                                verticalOffset: 50.0,
+                                child: FadeInAnimation(
+                                  child: Card(
+                                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                    color: Theme.of(context).cardColor,
+                                    clipBehavior: Clip.antiAlias,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                                    child: Container(
+                                      decoration: BoxDecoration(border: Border(left: BorderSide(color: coloreCamp, width: 6))),
+                                      child: ListTile(
+                                        leading: Container(
+                                          width: 50, height: 50,
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                          child: Center(child: logoWidget),
                                         ),
-                                        onPressed: () {
-                                          favorites.toggleFavorite(camp);
-                                          ScaffoldMessenger.of(context).clearSnackBars();
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text(isFav ? "Rimosso dai preferiti" : "Aggiunto ai preferiti! ⭐️"),
-                                              duration: const Duration(seconds: 1),
+                                        title: Text(nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        subtitle: Text(camp['categoria'] ?? "Motorsport", style: const TextStyle(fontSize: 12)),
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Consumer<FavoritesProvider>(
+                                              builder: (c, favs, child) {
+                                                final isFav = favs.isFavorite(camp);
+                                                return IconButton(
+                                                  icon: Icon(isFav ? Icons.star : Icons.star_border, color: isFav ? Colors.amber : Colors.grey),
+                                                  onPressed: () { HapticFeedback.selectionClick(); favs.toggleFavorite(camp); },
+                                                );
+                                              },
                                             ),
-                                          );
-                                        },
-                                      );
-                                    },
+                                            IconButton(icon: Icon(Icons.add_circle_outline, color: coloreCamp), onPressed: () { HapticFeedback.heavyImpact(); _sincronizza(camp['url_sorgente'], nome); }),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.add_circle_outline, color: Color(0xFFE53935)),
-                                    onPressed: () => _sincronizza(camp['url_sorgente'], nomeCampionato),
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                ),
+                            );
+                          },
+                        ),
+                    ),
+                  ),
         ),
       ],
     );
