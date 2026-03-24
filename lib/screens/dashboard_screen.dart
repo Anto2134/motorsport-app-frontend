@@ -114,7 +114,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. CAROSELLO PREFERITI
               if (favorites.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(32.0),
@@ -136,10 +135,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       
                       final garaData = liveCamp['prossima_gara'];
                       DateTime? targetDate;
+                      String titoloGara = "Ricerca dati in corso...";
                       
-                      String titoloGara = "Sorgente dati irraggiungibile ⚠️";
-                      if (_isLoading) {
-                        titoloGara = "Ricerca dati in corso...";
+                      if (!_isLoading && garaData == null) {
+                         titoloGara = "Sorgente dati irraggiungibile ⚠️";
                       } else if (garaData != null) {
                         titoloGara = garaData['gara_titolo'] ?? "";
                         targetDate = DateTime.fromMillisecondsSinceEpoch(garaData['timestamp'].toInt());
@@ -177,10 +176,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Container(width: 50, height: 35, padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)), child: logoFile.isNotEmpty ? Image.asset('assets/logos/$logoFile', fit: BoxFit.contain, errorBuilder: (c,e,s) => Icon(Icons.flag, color: coloreCamp)) : Icon(Icons.flag, color: coloreCamp)),
-                                    IconButton(
-                                      icon: Icon(Icons.calendar_month, color: coloreCamp),
-                                      onPressed: () { HapticFeedback.heavyImpact(); _sincronizza(liveCamp['url_sorgente'], campName); },
-                                    )
+                                    IconButton(icon: Icon(Icons.calendar_month, color: coloreCamp), onPressed: () { HapticFeedback.heavyImpact(); _sincronizza(liveCamp['url_sorgente'], campName); })
                                   ],
                                 ),
                                 const Spacer(),
@@ -204,13 +200,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
               
-              // 2. SEZIONE NOTIZIE VERE
-              const Padding(padding: EdgeInsets.only(left: 16, top: 32, bottom: 8), child: Text("Ultime dal Paddock 📰", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+              // ===============================================
+              // IL NUOVO FEED NOTIZIE (Stile Instagram)
+              // ===============================================
+              const Padding(
+                padding: EdgeInsets.only(left: 16, top: 32, bottom: 16), 
+                child: Text("Il tuo Feed 📸", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))
+              ),
               
               if (_isLoadingNews)
                 const Center(child: Padding(padding: EdgeInsets.all(32.0), child: CircularProgressIndicator()))
               else if (_newsList.isEmpty)
-                const Padding(padding: EdgeInsets.all(16.0), child: Text("Nessuna notizia disponibile al momento.", style: TextStyle(color: Colors.grey)))
+                const Padding(padding: EdgeInsets.all(16.0), child: Text("Nessuna notizia disponibile.", style: TextStyle(color: Colors.grey)))
               else
                 ListView.builder(
                   shrinkWrap: true,
@@ -218,50 +219,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   itemCount: _newsList.length,
                   itemBuilder: (context, index) {
                     final news = _newsList[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      elevation: 2,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(15),
-                        onTap: () async {
-                          HapticFeedback.lightImpact();
-                          final url = Uri.parse(news['link']);
-                          if (await canLaunchUrl(url)) {
-                            // Apre la notizia direttamente dentro l'app (senza uscire)
-                            await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-                          }
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 50, height: 50, 
-                                decoration: BoxDecoration(color: const Color(0xFFE53935).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), 
-                                child: const Icon(Icons.campaign, color: Color(0xFFE53935))
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(news['titolo'] ?? "Titolo non disponibile", maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                    const SizedBox(height: 6),
-                                    Text(news['data'] ?? "", style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                  ],
+                    final String imgUrl = news['immagine'] ?? "";
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 24),
+                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 1. HEADER DEL POST (Autore)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: const Color(0xFFE53935).withOpacity(0.1),
+                                  child: const Icon(Icons.sports_motorsports, color: Color(0xFFE53935), size: 20),
                                 ),
-                              ),
-                              const Icon(Icons.chevron_right, color: Colors.grey)
-                            ],
+                                const SizedBox(width: 12),
+                                const Text("Motorsport.com", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                const Spacer(),
+                                const Icon(Icons.more_vert, size: 20, color: Colors.grey),
+                              ],
+                            ),
                           ),
-                        ),
+                          
+                          // 2. L'IMMAGINE GIGANTE (Cliccabile)
+                          GestureDetector(
+                            onTap: () async {
+                              HapticFeedback.selectionClick();
+                              final url = Uri.parse(news['link']);
+                              if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                            },
+                            child: imgUrl.isNotEmpty
+                                ? Image.network(
+                                    imgUrl,
+                                    width: double.infinity,
+                                    height: 250,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (c, e, s) => Container(height: 250, color: Colors.grey.withOpacity(0.2), child: const Icon(Icons.broken_image, size: 50, color: Colors.grey)),
+                                  )
+                                : Container(
+                                    height: 250, width: double.infinity,
+                                    color: Colors.grey.withOpacity(0.2),
+                                    child: const Center(child: Icon(Icons.article, size: 60, color: Colors.grey)),
+                                  ),
+                          ),
+                          
+                          // 3. LA BARRA DELLE AZIONI
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              children: [
+                                Icon(Icons.favorite_border, size: 28),
+                                SizedBox(width: 16),
+                                Icon(Icons.mode_comment_outlined, size: 28),
+                                SizedBox(width: 16),
+                                Icon(Icons.send_outlined, size: 28),
+                                Spacer(),
+                                Icon(Icons.bookmark_border, size: 28),
+                              ],
+                            ),
+                          ),
+                          
+                          // 4. TITOLO (Caption) E DATA
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: RichText(
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              text: TextSpan(
+                                style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 15, height: 1.3),
+                                children: [
+                                  const TextSpan(text: "Motorsport.com ", style: TextStyle(fontWeight: FontWeight.bold)),
+                                  TextSpan(text: news['titolo'] ?? ""),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16, top: 6, bottom: 8),
+                            child: Text(news['data'] ?? "", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          ),
+                        ],
                       ),
                     );
                   },
                 ),
-                const SizedBox(height: 20),
             ],
           ),
         ),
