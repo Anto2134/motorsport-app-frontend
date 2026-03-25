@@ -14,7 +14,8 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final String baseUrl = "motorsport-hub1-0-1.onrender.com";
+  final String serverUrl = "http://127.0.0.1:5000"; 
+  
   Map<String, dynamic> _liveData = {};
   List<dynamic> _newsList = [];
   bool _isLoading = true;
@@ -40,7 +41,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _fetchLiveTimestamps() async {
     try {
-      final res = await http.get(Uri.parse('https://$baseUrl/api/campionati'));
+      final res = await http.get(Uri.parse('$serverUrl/api/campionati'));
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         Map<String, dynamic> mappedData = {};
@@ -57,7 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _fetchNews() async {
     if (mounted) setState(() => _isLoadingNews = true);
     try {
-      final res = await http.get(Uri.parse('https://$baseUrl/api/news'));
+      final res = await http.get(Uri.parse('$serverUrl/api/news'));
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (mounted) setState(() { _newsList = data['news']; _isLoadingNews = false; });
@@ -93,7 +94,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _sincronizza(String u, String n) async {
-    final webcalUrl = Uri.parse('webcal://$baseUrl/calendari/genera?url=${Uri.encodeComponent(u)}&nome=${Uri.encodeComponent(n)}');
+    final domain = serverUrl.replaceAll("https://", "").replaceAll("http://", "");
+    final webcalUrl = Uri.parse('webcal://$domain/calendari/genera?url=${Uri.encodeComponent(u)}&nome=${Uri.encodeComponent(n)}');
     if (!await launchUrl(webcalUrl) && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Impossibile aprire il calendario")));
     }
@@ -200,12 +202,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
               
-              // ===============================================
-              // IL NUOVO FEED NOTIZIE (Stile Instagram)
-              // ===============================================
               const Padding(
                 padding: EdgeInsets.only(left: 16, top: 32, bottom: 16), 
-                child: Text("Il tuo Feed 📸", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))
+                child: Text("Esplora il Paddock 📸", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))
               ),
               
               if (_isLoadingNews)
@@ -219,7 +218,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   itemCount: _newsList.length,
                   itemBuilder: (context, index) {
                     final news = _newsList[index];
-                    final String imgUrl = news['immagine'] ?? "";
+                    final String rawImgUrl = news['immagine'] ?? "";
+                    final String fonte = news['fonte'] ?? "Motorsport Hub";
+                    
+                    // PASSAGGIO CHIAVE: Usiamo il nostro Python come Proxy!
+                    final String proxyImgUrl = rawImgUrl.isNotEmpty 
+                        ? "$serverUrl/api/image?url=${Uri.encodeComponent(rawImgUrl)}"
+                        : "";
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 24),
@@ -227,7 +232,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 1. HEADER DEL POST (Autore)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             child: Row(
@@ -238,66 +242,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   child: const Icon(Icons.sports_motorsports, color: Color(0xFFE53935), size: 20),
                                 ),
                                 const SizedBox(width: 12),
-                                const Text("Motorsport.com", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                Text(fonte, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                                 const Spacer(),
                                 const Icon(Icons.more_vert, size: 20, color: Colors.grey),
                               ],
                             ),
                           ),
                           
-                          // 2. L'IMMAGINE GIGANTE (Cliccabile)
                           GestureDetector(
                             onTap: () async {
+                              if (news['link'] == "") return;
                               HapticFeedback.selectionClick();
                               final url = Uri.parse(news['link']);
                               if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.inAppBrowserView);
                             },
-                            child: imgUrl.isNotEmpty
+                            child: proxyImgUrl.isNotEmpty
                                 ? Image.network(
-                                    imgUrl,
-                                    width: double.infinity,
-                                    height: 250,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (c, e, s) => Container(height: 250, color: Colors.grey.withOpacity(0.2), child: const Icon(Icons.broken_image, size: 50, color: Colors.grey)),
+                                    proxyImgUrl,
+                                    width: double.infinity, height: 250, fit: BoxFit.cover,
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Container(height: 250, color: isDark ? Colors.black12 : Colors.grey.withOpacity(0.1), child: const Center(child: CircularProgressIndicator(color: Colors.red)));
+                                    },
+                                    errorBuilder: (c, e, s) {
+                                      return Container(
+                                        height: 250, width: double.infinity, color: isDark ? Colors.black26 : Colors.grey.withOpacity(0.1), 
+                                        child: const Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
+                                            SizedBox(height: 8),
+                                            Text("Immagine non disponibile", style: TextStyle(color: Colors.grey, fontSize: 12))
+                                          ]
+                                        )
+                                      );
+                                    },
                                   )
-                                : Container(
-                                    height: 250, width: double.infinity,
-                                    color: Colors.grey.withOpacity(0.2),
-                                    child: const Center(child: Icon(Icons.article, size: 60, color: Colors.grey)),
-                                  ),
+                                : Container(height: 250, width: double.infinity, color: isDark ? Colors.black26 : Colors.grey.withOpacity(0.1), child: const Center(child: Icon(Icons.article, size: 60, color: Colors.grey))),
                           ),
                           
-                          // 3. LA BARRA DELLE AZIONI
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             child: Row(
                               children: [
-                                Icon(Icons.favorite_border, size: 28),
-                                SizedBox(width: 16),
-                                Icon(Icons.mode_comment_outlined, size: 28),
-                                SizedBox(width: 16),
-                                Icon(Icons.send_outlined, size: 28),
-                                Spacer(),
+                                Icon(Icons.favorite_border, size: 28), SizedBox(width: 16),
+                                Icon(Icons.mode_comment_outlined, size: 28), SizedBox(width: 16),
+                                Icon(Icons.send_outlined, size: 28), Spacer(),
                                 Icon(Icons.bookmark_border, size: 28),
                               ],
                             ),
                           ),
                           
-                          // 4. TITOLO (Caption) E DATA
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: RichText(
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
+                              maxLines: 3, overflow: TextOverflow.ellipsis,
                               text: TextSpan(
                                 style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 15, height: 1.3),
-                                children: [
-                                  const TextSpan(text: "Motorsport.com ", style: TextStyle(fontWeight: FontWeight.bold)),
-                                  TextSpan(text: news['titolo'] ?? ""),
-                                ],
+                                children: [TextSpan(text: "$fonte ", style: const TextStyle(fontWeight: FontWeight.bold)), TextSpan(text: news['titolo'] ?? "")],
                               ),
                             ),
                           ),
+                          
                           Padding(
                             padding: const EdgeInsets.only(left: 16, top: 6, bottom: 8),
                             child: Text(news['data'] ?? "", style: const TextStyle(fontSize: 12, color: Colors.grey)),
