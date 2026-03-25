@@ -14,7 +14,9 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final String serverUrl = "http://127.0.0.1:5000"; 
+  //final String serverUrl = "http://localhost:5000"; // TEST LOCALE (Chrome)
+  // final String serverUrl = "http://10.0.2.2:5000"; // TEST LOCALE (Emulatore Android)
+   final String serverUrl = "https://motorsport-hub1-0-1.onrender.com"; // PRODUZIONE
   
   Map<String, dynamic> _liveData = {};
   List<dynamic> _newsList = [];
