@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -25,7 +26,10 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
   bool _showPiloti = true;
   String _selectedYear = DateTime.now().year.toString();
   bool _isLoadingHistory = false;
+  
   bool _isRaceResultsExpanded = false;
+  bool _isStandingsExpanded = false; 
+  bool _isCalendarExpanded = false; 
   
   List<dynamic> _pilotiVisibili = [];
   List<dynamic> _costruttoriVisibili = [];
@@ -46,15 +50,38 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
     return Color(int.parse(hexColor, radix: 16));
   }
 
+  Color _getTextColorForBackground(Color background) {
+    return background.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
+  }
+
+  // ==========================================
+  // FILTRO NOTIZIE BLINDATO
+  // ==========================================
   List<dynamic> _getFilteredNews() {
-    String nome = widget.campionato['nome'].toString().toLowerCase();
-    String keyword = (widget.campionato['keyword'] ?? nome).toString().toLowerCase();
+    String nomeCamp = widget.campionato['nome'].toString().toLowerCase();
 
     return widget.allNews.where((news) {
       String title = (news['titolo'] ?? "").toString().toLowerCase();
-      if (keyword.contains('formula 1') && (title.contains('formula 1') || title.contains('f1'))) return true;
-      if (keyword.contains('wrc') && (title.contains('wrc') || title.contains('rally'))) return true;
-      return title.contains(keyword) || title.contains(nome.split(' ')[0]);
+      String source = (news['fonte'] ?? "").toString().toLowerCase();
+      
+      // Regole rigidissime per evitare scambi tra F1, F2, F3 e FE
+      if (nomeCamp.contains('formula 1')) return title.contains('formula 1') || title.contains('f1');
+      if (nomeCamp.contains('formula 2')) return title.contains('formula 2') || title.contains('f2');
+      if (nomeCamp.contains('formula 3')) return title.contains('formula 3') || title.contains('f3');
+      if (nomeCamp.contains('formula e')) return title.contains('formula e') || title.contains('fe');
+      
+      // Altri VIP
+      if (nomeCamp.contains('wec')) return title.contains('wec') || title.contains('endurance');
+      if (nomeCamp.contains('wrc')) return title.contains('wrc') || title.contains('rally');
+      if (nomeCamp.contains('motogp')) return title.contains('motogp');
+      if (nomeCamp.contains('superbike')) return title.contains('wsbk') || title.contains('superbike');
+      if (nomeCamp.contains('indycar')) return title.contains('indycar');
+      if (nomeCamp.contains('nascar')) return title.contains('nascar');
+      if (nomeCamp.contains('imsa')) return title.contains('imsa');
+      if (nomeCamp.contains('dtm')) return title.contains('dtm');
+      
+      // Fallback per campionati minori non VIP
+      return title.contains(nomeCamp.split(' ')[0]); 
     }).toList();
   }
 
@@ -87,9 +114,25 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
     return DateFormat('d MMMM yyyy', 'it_IT').format(date);
   }
 
+  String _formatWeekend(dynamic tInizio, dynamic tFine) {
+    if (tInizio == null || tFine == null) return "-";
+    DateTime dInizio = DateTime.fromMillisecondsSinceEpoch(tInizio.toInt());
+    DateTime dFine = DateTime.fromMillisecondsSinceEpoch(tFine.toInt());
+
+    if (dInizio.month == dFine.month && dInizio.day == dFine.day) {
+      return DateFormat('d\nMMM', 'it_IT').format(dInizio);
+    }
+    if (dInizio.month == dFine.month) {
+      return "${dInizio.day}-${dFine.day}\n${DateFormat('MMM', 'it_IT').format(dFine)}";
+    } else {
+      return "${dInizio.day} ${DateFormat('MMM', 'it_IT').format(dInizio)}\n${dFine.day} ${DateFormat('MMM', 'it_IT').format(dFine)}";
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final coloreCamp = _parseColor(widget.campionato['colore']);
+    final coloreTestoDinamico = _getTextColorForBackground(coloreCamp); 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final filteredNews = _getFilteredNews();
     final logoFile = widget.campionato['logo_file'] ?? "";
@@ -99,6 +142,9 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
     final Map<String, dynamic>? ultimaGara = widget.campionato['ultima_gara'];
     final List<dynamic> risultatiUltimaGara = widget.campionato['risultati_ultima_gara'] ?? [];
     
+    final String titoloSessione = widget.campionato['titolo_ultima_sessione'] ?? "";
+    final String titoloMostrato = titoloSessione.isNotEmpty ? "Risultati: $titoloSessione" : "Ultimi Risultati in Pista";
+
     int currentYear = DateTime.now().year;
     List<String> years = List.generate(currentYear - 2019, (index) => (currentYear - index).toString());
 
@@ -110,9 +156,9 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
             floating: false,
             pinned: true,
             backgroundColor: coloreCamp,
-            iconTheme: const IconThemeData(color: Colors.white), // Fissato al Bianco
+            iconTheme: const IconThemeData(color: Colors.white),
             flexibleSpace: FlexibleSpaceBar(
-              title: Text(widget.campionato['nome'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)), // Fissato al Bianco
+              title: Text(widget.campionato['nome'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
               background: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -130,9 +176,7 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   
-                  if (ultimaGara != null) ...[
-                    const Text("Ultima Gara Corsa", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
+                  if (ultimaGara != null || risultatiUltimaGara.isNotEmpty) ...[
                     Container(
                       width: double.infinity,
                       decoration: BoxDecoration(
@@ -146,20 +190,17 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
                         children: [
                           Container(
                             padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: coloreCamp.withOpacity(0.1),
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                            ),
+                            decoration: BoxDecoration(color: coloreCamp.withOpacity(0.1), borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
                             child: Row(
                               children: [
-                                Icon(Icons.sports_score, color: coloreCamp),
+                                Icon(Icons.timer, color: coloreCamp),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(ultimaGara['gara_titolo'] ?? "", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                      Text(_formatDate(ultimaGara['timestamp']), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                      Text(titoloMostrato, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                      if (ultimaGara != null) Text(_formatDate(ultimaGara['timestamp']), style: const TextStyle(color: Colors.grey, fontSize: 12)),
                                     ],
                                   ),
                                 ),
@@ -191,8 +232,7 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
                               InkWell(
                                 onTap: () => setState(() => _isRaceResultsExpanded = !_isRaceResultsExpanded),
                                 child: Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 12),
                                   decoration: BoxDecoration(border: Border(top: BorderSide(color: isDark ? Colors.white10 : Colors.black12)), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16))),
                                   child: Center(child: Text(_isRaceResultsExpanded ? "Comprimi classifica" : "Espandi classifica completa", style: TextStyle(color: coloreCamp, fontWeight: FontWeight.bold))),
                                 ),
@@ -203,137 +243,185 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
                   ],
 
                   if (_pilotiVisibili.isNotEmpty || _isLoadingHistory) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text("Standings", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                          decoration: BoxDecoration(color: isDark ? Colors.black38 : Colors.grey.shade200, borderRadius: BorderRadius.circular(20)),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedYear,
-                              icon: const Icon(Icons.history, size: 18),
-                              style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black),
-                              items: years.map((String value) => DropdownMenuItem<String>(value: value, child: Text(value))).toList(),
-                              onChanged: (String? newValue) {
-                                if (newValue != null && newValue != _selectedYear) _fetchHistoricalStandings(newValue);
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      height: 40,
-                      decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey.shade200, borderRadius: BorderRadius.circular(20)),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setState(() => _showPiloti = true),
-                              child: Container(decoration: BoxDecoration(color: _showPiloti ? coloreCamp : Colors.transparent, borderRadius: BorderRadius.circular(20)), child: Center(child: Text("Piloti", style: TextStyle(color: _showPiloti ? Colors.white : Colors.grey.shade600, fontWeight: FontWeight.bold)))),
-                            ),
-                          ),
-                          if (_costruttoriVisibili.isNotEmpty || _isLoadingHistory)
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() => _showPiloti = false),
-                                child: Container(decoration: BoxDecoration(color: !_showPiloti ? coloreCamp : Colors.transparent, borderRadius: BorderRadius.circular(20)), child: Center(child: Text("Team", style: TextStyle(color: !_showPiloti ? Colors.white : Colors.grey.shade600, fontWeight: FontWeight.bold)))),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
                     Container(
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
                         borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: coloreCamp.withOpacity(0.3)),
                         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]
                       ),
-                      child: _isLoadingHistory 
-                        ? const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()))
-                        : ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: listaAttiva.length,
-                            separatorBuilder: (context, index) => Divider(height: 1, color: isDark ? Colors.white10 : Colors.black12),
-                            itemBuilder: (context, index) {
-                              var item = listaAttiva[index];
-                              bool isTop3 = index < 3;
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                                child: Row(
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(color: coloreCamp.withOpacity(0.1), borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
                                   children: [
-                                    SizedBox(width: 30, child: Center(child: Text(item['pos'], style: TextStyle(fontSize: isTop3 ? 18 : 15, fontWeight: isTop3 ? FontWeight.bold : FontWeight.w500, color: isDark ? Colors.white70 : Colors.black87)))),
-                                    const SizedBox(width: 12),
-                                    Expanded(child: Text(item['nome'], style: TextStyle(fontSize: 16, fontWeight: isTop3 ? FontWeight.bold : FontWeight.w500))),
-                                    // COLORE BADGE SICURO!
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), 
-                                      decoration: BoxDecoration(
-                                        color: isDark ? coloreCamp.withOpacity(0.4) : coloreCamp.withOpacity(0.15), 
-                                        borderRadius: BorderRadius.circular(12)
-                                      ), 
-                                      child: Text("${item['punti']} pt", style: TextStyle(
-                                        color: isDark ? Colors.white : coloreCamp, 
-                                        fontWeight: FontWeight.bold
-                                      ))
-                                    )
+                                    Icon(Icons.emoji_events, color: coloreCamp),
+                                    const SizedBox(width: 8),
+                                    const Text("Classifiche", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                                   ],
                                 ),
-                              );
-                            }
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                                  decoration: BoxDecoration(color: isDark ? Colors.black38 : Colors.white, borderRadius: BorderRadius.circular(20)),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _selectedYear,
+                                      icon: const Icon(Icons.history, size: 16),
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : Colors.black),
+                                      items: years.map((String value) => DropdownMenuItem<String>(value: value, child: Text(value))).toList(),
+                                      onChanged: (String? newValue) {
+                                        if (newValue != null && newValue != _selectedYear) _fetchHistoricalStandings(newValue);
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                    ),
-                    const SizedBox(height: 32),
-                  ],
-
-                  if (calendario.isNotEmpty) ...[
-                    const Text("Calendario Stagione", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]
-                      ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: calendario.length,
-                        separatorBuilder: (context, index) => Divider(height: 1, color: isDark ? Colors.white10 : Colors.black12),
-                        itemBuilder: (context, index) {
-                          var gara = calendario[index];
-                          bool isPassata = gara['stato'] == 'conclusa';
-                          
-                          return ListTile(
-                            leading: Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: isPassata ? Colors.grey.withOpacity(0.2) : coloreCamp.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12)
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Container(
+                              height: 40,
+                              decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey.shade200, borderRadius: BorderRadius.circular(20)),
+                              child: Row(
                                 children: [
-                                  Text(DateFormat('d', 'it_IT').format(DateTime.fromMillisecondsSinceEpoch(gara['timestamp'].toInt())), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isPassata ? Colors.grey : coloreCamp)),
-                                  Text(DateFormat('MMM', 'it_IT').format(DateTime.fromMillisecondsSinceEpoch(gara['timestamp'].toInt())), style: TextStyle(fontSize: 10, color: isPassata ? Colors.grey : coloreCamp)),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(() { _showPiloti = true; _isStandingsExpanded = false; }),
+                                      child: Container(decoration: BoxDecoration(color: _showPiloti ? coloreCamp : Colors.transparent, borderRadius: BorderRadius.circular(20)), child: Center(child: Text("Piloti", style: TextStyle(color: _showPiloti ? coloreTestoDinamico : Colors.grey.shade600, fontWeight: FontWeight.bold)))),
+                                    ),
+                                  ),
+                                  if (_costruttoriVisibili.isNotEmpty || _isLoadingHistory)
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () => setState(() { _showPiloti = false; _isStandingsExpanded = false; }),
+                                        child: Container(decoration: BoxDecoration(color: !_showPiloti ? coloreCamp : Colors.transparent, borderRadius: BorderRadius.circular(20)), child: Center(child: Text("Team", style: TextStyle(color: !_showPiloti ? coloreTestoDinamico : Colors.grey.shade600, fontWeight: FontWeight.bold)))),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),
-                            title: Text(gara['titolo'], style: TextStyle(fontWeight: isPassata ? FontWeight.normal : FontWeight.bold, color: isPassata ? Colors.grey : (isDark ? Colors.white : Colors.black))),
-                            subtitle: gara['luogo'] != "" ? Text(gara['luogo'], style: const TextStyle(fontSize: 12)) : null,
-                            trailing: isPassata ? const Icon(Icons.check_circle, color: Colors.green) : const Icon(Icons.flag_outlined, color: Colors.grey),
-                          );
-                        }
+                          ),
+                          _isLoadingHistory 
+                            ? const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()))
+                            : Column(
+                                children: [
+                                  ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: _isStandingsExpanded ? listaAttiva.length : (listaAttiva.length > 5 ? 5 : listaAttiva.length),
+                                    separatorBuilder: (context, index) => Divider(height: 1, color: isDark ? Colors.white10 : Colors.black12),
+                                    itemBuilder: (context, index) {
+                                      var item = listaAttiva[index];
+                                      bool isTop3 = index < 3;
+                                      
+                                      Color pillColor = isDark ? coloreCamp.withOpacity(0.2) : coloreCamp.withOpacity(0.1);
+                                      Color textPillColor = coloreCamp;
+                                      if (coloreCamp.computeLuminance() > 0.5 && !isDark) { pillColor = coloreCamp; textPillColor = Colors.black87; }
+
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                        child: Row(
+                                          children: [
+                                            SizedBox(width: 30, child: Center(child: Text(item['pos'], style: TextStyle(fontSize: isTop3 ? 18 : 15, fontWeight: isTop3 ? FontWeight.bold : FontWeight.w500, color: isDark ? Colors.white70 : Colors.black87)))),
+                                            const SizedBox(width: 12),
+                                            Expanded(child: Text(item['nome'], style: TextStyle(fontSize: 16, fontWeight: isTop3 ? FontWeight.bold : FontWeight.w500))),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), 
+                                              decoration: BoxDecoration(color: pillColor, borderRadius: BorderRadius.circular(12)), 
+                                              child: Text("${item['punti']} pt", style: TextStyle(color: textPillColor, fontWeight: FontWeight.bold, fontSize: 13))
+                                            )
+                                          ],
+                                        ),
+                                      );
+                                    }
+                                  ),
+                                  if (listaAttiva.length > 5)
+                                    InkWell(
+                                      onTap: () => setState(() => _isStandingsExpanded = !_isStandingsExpanded),
+                                      child: Container(
+                                        width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 12),
+                                        decoration: BoxDecoration(border: Border(top: BorderSide(color: isDark ? Colors.white10 : Colors.black12)), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16))),
+                                        child: Center(child: Text(_isStandingsExpanded ? "Mostra solo i Top 5" : "Espandi classifica completa", style: TextStyle(color: coloreCamp, fontWeight: FontWeight.bold))),
+                                      ),
+                                    )
+                                ],
+                              )
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  if (calendario.isNotEmpty) ...[
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: coloreCamp.withOpacity(0.3)),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]
+                      ),
+                      child: Column(
+                        children: [
+                          InkWell(
+                            onTap: () => setState(() => _isCalendarExpanded = !_isCalendarExpanded),
+                            borderRadius: _isCalendarExpanded ? const BorderRadius.vertical(top: Radius.circular(16)) : BorderRadius.circular(16),
+                            child: Container(
+                              padding: const EdgeInsets.all(16.0),
+                              decoration: BoxDecoration(color: coloreCamp.withOpacity(0.1), borderRadius: _isCalendarExpanded ? const BorderRadius.vertical(top: Radius.circular(16)) : BorderRadius.circular(16)),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.calendar_month, color: coloreCamp),
+                                  const SizedBox(width: 12),
+                                  const Expanded(child: Text("Calendario Stagione", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                                  Text("${calendario.length} Eventi", style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                                  const SizedBox(width: 8),
+                                  Icon(_isCalendarExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.grey),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (_isCalendarExpanded) ...[
+                            Divider(height: 1, color: isDark ? Colors.white10 : Colors.black12),
+                            ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: calendario.length,
+                              separatorBuilder: (context, index) => Divider(height: 1, color: isDark ? Colors.white10 : Colors.black12),
+                              itemBuilder: (context, index) {
+                                var gara = calendario[index];
+                                bool isPassata = gara['stato'] == 'conclusa';
+                                String rangeDate = _formatWeekend(gara['timestamp_inizio'] ?? gara['timestamp'], gara['timestamp_fine'] ?? gara['timestamp']);
+                                
+                                return ListTile(
+                                  onTap: () {
+                                    HapticFeedback.lightImpact();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text("Macchina del Tempo in arrivo per: ${gara['titolo']}!"), duration: const Duration(seconds: 2)),
+                                    );
+                                  },
+                                  leading: Container(
+                                    width: 65, height: 50,
+                                    decoration: BoxDecoration(color: isPassata ? Colors.grey.withOpacity(0.2) : coloreCamp.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                                    child: Center(child: Text(rangeDate, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isPassata ? Colors.grey : coloreCamp))),
+                                  ),
+                                  title: Text(gara['titolo'], style: TextStyle(fontWeight: isPassata ? FontWeight.normal : FontWeight.bold, color: isPassata ? Colors.grey : (isDark ? Colors.white : Colors.black))),
+                                  subtitle: gara['luogo'] != "" ? Text(gara['luogo'], style: const TextStyle(fontSize: 12)) : null,
+                                  trailing: isPassata ? const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey) : const Icon(Icons.flag_outlined, color: Colors.grey),
+                                );
+                              }
+                            ),
+                          ]
+                        ],
                       ),
                     ),
                     const SizedBox(height: 32),
