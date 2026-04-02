@@ -55,33 +55,31 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
   }
 
   // ==========================================
-  // FILTRO NOTIZIE BLINDATO
+  // FILTRO NOTIZIE CORRETTO (BYE BYE BUG "FE")
   // ==========================================
   List<dynamic> _getFilteredNews() {
     String nomeCamp = widget.campionato['nome'].toString().toLowerCase();
+    String keyword = (widget.campionato['keyword'] ?? nomeCamp).toString().toLowerCase();
 
     return widget.allNews.where((news) {
       String title = (news['titolo'] ?? "").toString().toLowerCase();
       String source = (news['fonte'] ?? "").toString().toLowerCase();
+
+      if (keyword == 'formula e' || nomeCamp.contains('formula e')) return title.contains('formula e') || title.contains('formula-e') || title.contains('abb fia');
+      if (keyword == 'formula 2' || nomeCamp.contains('formula 2')) return title.contains('formula 2') || title.contains('f2');
+      if (keyword == 'formula 3' || nomeCamp.contains('formula 3')) return title.contains('formula 3') || title.contains('f3');
+      if (keyword == 'formula 1' || nomeCamp.contains('formula 1')) return title.contains('formula 1') || title.contains('f1');
+
+      if (keyword.contains('wec')) return title.contains('wec') || title.contains('endurance');
+      if (keyword.contains('wrc')) return title.contains('wrc') || title.contains('rally');
+      if (keyword.contains('motogp')) return title.contains('motogp');
+      if (keyword.contains('superbike')) return title.contains('wsbk') || title.contains('superbike');
+      if (keyword.contains('indycar')) return title.contains('indycar');
+      if (keyword.contains('nascar')) return title.contains('nascar');
+      if (keyword.contains('imsa')) return title.contains('imsa');
+      if (keyword.contains('dtm')) return title.contains('dtm');
       
-      // Regole rigidissime per evitare scambi tra F1, F2, F3 e FE
-      if (nomeCamp.contains('formula 1')) return title.contains('formula 1') || title.contains('f1');
-      if (nomeCamp.contains('formula 2')) return title.contains('formula 2') || title.contains('f2');
-      if (nomeCamp.contains('formula 3')) return title.contains('formula 3') || title.contains('f3');
-      if (nomeCamp.contains('formula e')) return title.contains('formula e') || title.contains('fe');
-      
-      // Altri VIP
-      if (nomeCamp.contains('wec')) return title.contains('wec') || title.contains('endurance');
-      if (nomeCamp.contains('wrc')) return title.contains('wrc') || title.contains('rally');
-      if (nomeCamp.contains('motogp')) return title.contains('motogp');
-      if (nomeCamp.contains('superbike')) return title.contains('wsbk') || title.contains('superbike');
-      if (nomeCamp.contains('indycar')) return title.contains('indycar');
-      if (nomeCamp.contains('nascar')) return title.contains('nascar');
-      if (nomeCamp.contains('imsa')) return title.contains('imsa');
-      if (nomeCamp.contains('dtm')) return title.contains('dtm');
-      
-      // Fallback per campionati minori non VIP
-      return title.contains(nomeCamp.split(' ')[0]); 
+      return title.contains(keyword) || source.contains(keyword); 
     }).toList();
   }
 
@@ -134,7 +132,6 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
     final coloreCamp = _parseColor(widget.campionato['colore']);
     final coloreTestoDinamico = _getTextColorForBackground(coloreCamp); 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final filteredNews = _getFilteredNews();
     final logoFile = widget.campionato['logo_file'] ?? "";
     
     final List<dynamic> listaAttiva = _showPiloti ? _pilotiVisibili : _costruttoriVisibili;
@@ -147,6 +144,18 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
 
     int currentYear = DateTime.now().year;
     List<String> years = List.generate(currentYear - 2019, (index) => (currentYear - index).toString());
+
+    // ==========================================
+    // LOGICA DI FALLBACK PER I CAMPIONATI MINORI
+    // ==========================================
+    List<dynamic> displayNews = _getFilteredNews();
+    String newsSectionTitle = "Ultime Notizie";
+    
+    if (displayNews.isEmpty) {
+      // Se è un campionato minore e non ha news specifiche, prendi le prime 5 dal pool globale!
+      displayNews = widget.allNews.take(5).toList();
+      newsSectionTitle = "Dal mondo Motorsport"; // Cambiamo il titolo per far capire all'utente
+    }
 
     return Scaffold(
       body: CustomScrollView(
@@ -427,56 +436,54 @@ class _ChampionshipDetailScreenState extends State<ChampionshipDetailScreen> {
                     const SizedBox(height: 32),
                   ],
                   
-                  const Text("Ultime Notizie", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  // IL NUOVO TITOLO DINAMICO!
+                  Text(newsSectionTitle, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
                   
-                  if (filteredNews.isEmpty)
-                    const Center(child: Padding(padding: EdgeInsets.all(32.0), child: Text("Nessuna notizia recente.", style: TextStyle(color: Colors.grey))))
-                  else
-                    ...filteredNews.map((news) {
-                      final String rawImgUrl = news['immagine'] ?? "";
-                      final String proxyImgUrl = rawImgUrl.isNotEmpty ? "${widget.serverUrl}/api/image?url=${Uri.encodeComponent(rawImgUrl)}" : "";
-                      
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        clipBehavior: Clip.antiAlias,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: InkWell(
-                          onTap: () async {
-                            if (news['link'] != "") {
-                              final url = Uri.parse(news['link']);
-                              if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-                            }
-                          },
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (proxyImgUrl.isNotEmpty)
-                                Image.network(proxyImgUrl, height: 180, width: double.infinity, fit: BoxFit.cover,
-                                  errorBuilder: (c,e,s) => Container(height: 180, color: Colors.grey.shade200, child: const Icon(Icons.broken_image, color: Colors.grey))
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.all(12.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(news['titolo'] ?? "", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(news['fonte'] ?? "", style: TextStyle(fontSize: 12, color: coloreCamp, fontWeight: FontWeight.bold)),
-                                        Text(news['data'] ?? "", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                      ],
-                                    )
-                                  ],
-                                ),
-                              )
-                            ],
-                          ),
+                  ...displayNews.map((news) {
+                    final String rawImgUrl = news['immagine'] ?? "";
+                    final String proxyImgUrl = rawImgUrl.isNotEmpty ? "${widget.serverUrl}/api/image?url=${Uri.encodeComponent(rawImgUrl)}" : "";
+                    
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      clipBehavior: Clip.antiAlias,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: InkWell(
+                        onTap: () async {
+                          if (news['link'] != "") {
+                            final url = Uri.parse(news['link']);
+                            if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                          }
+                        },
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (proxyImgUrl.isNotEmpty)
+                              Image.network(proxyImgUrl, height: 180, width: double.infinity, fit: BoxFit.cover,
+                                errorBuilder: (c,e,s) => Container(height: 180, color: Colors.grey.shade200, child: const Icon(Icons.broken_image, color: Colors.grey))
+                              ),
+                            Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(news['titolo'] ?? "", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(news['fonte'] ?? "", style: TextStyle(fontSize: 12, color: coloreCamp, fontWeight: FontWeight.bold)),
+                                      Text(news['data'] ?? "", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                    ],
+                                  )
+                                ],
+                              ),
+                            )
+                          ],
                         ),
-                      );
-                    }).toList(),
+                      ),
+                    );
+                  }).toList(),
                 ],
               ),
             ),

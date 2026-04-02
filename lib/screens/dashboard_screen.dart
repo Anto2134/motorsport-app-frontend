@@ -21,7 +21,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // CONFIGURAZIONE AMBIENTE
   // ===============================================
   //final String serverUrl = "http://127.0.0.1:5000"; // TEST LOCALE
-   final String serverUrl = "https://motorsport-hub1-0-1.onrender.com"; // PRODUZIONE
+  final String serverUrl = "https://motorsport-hub1-0-1.onrender.com"; // PRODUZIONE
 
   Map<String, dynamic> _liveData = {};
   List<dynamic> _newsList = [];
